@@ -7,7 +7,9 @@ const apiRoot = "http://localhost:8888/"
 function sendDbReq() {
     const query = document.getElementById("txtarea").value;
     let method = "";
-    query.trim.trim();
+    query.trim.trim(); // removing white space here
+
+    // Determine the method based on the query...
     if (query.startsWith() == "SELECT") {
         method = "GET";
     }
@@ -27,8 +29,22 @@ function sendDbReq() {
     }
 }
 
+function spamQuery(){
+    const xhttp = new XMLHttpRequest();
+    xhttp.open(method, `${apiRoot}/query`);
+    xhttp.send("spamInsert");                      // Sending the query
+    xhttp.onreadystatechange = () => {
+        // do something
+    }
+}
+
 const subBtn = document.getElementById("submit-btn");
 subBtn.addEventListener('click', () => {
-    postToDb();
+    sendDbReq();
 })
+
+const spamBtn = document.getElementById("spam-btn");
+spamBtn.addEventListener('click', () => {
+    spamQuery();
+});
 
