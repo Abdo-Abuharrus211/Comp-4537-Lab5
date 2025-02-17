@@ -1,18 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DBinger</title>
-    <link rel="stylesheet" href="./styles/styles.css">
+    <title>Database Client</title>
+    <link rel="stylesheet" href="./styles/style.css">
 </head>
-<body>
-    
-    <button id="spam-btn">Do the SPAM thing</button>
-    <div>
-        <textarea name="responses" id="txtarea" placeholder="Results here..."></textarea>
-        <button id="submit-btn">send query</button>
-    </div>
 
+<body>
+    <h1>Patient Database</h1>
+
+    <button id="insertBtn">Insert Default Patients</button>
+    <br><br>
+
+    <textarea id="queryBox" placeholder="Enter SELECT or INSERT SQL query" rows="4" cols="50"></textarea>
+    <br>
+    <button id="queryBtn">Run Query</button>
+
+    <h3>Server Response:</h3>
+    <pre id="output"></pre>
+
+    <script type="module" src="./scripts/script.js"></script>
 </body>
+
 </html>
