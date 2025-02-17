@@ -1,119 +1,135 @@
 const http = require("http");
+const { Client } = require("pg"); // Import the PostgreSQL client
 const url = require("url");
-const { createClient } = require('@supabase/supabase-js');
+const path = require("path");
+const port = process.env.PORT || 8000;
 
-// Supabase configuration
-// const supabaseUrl = 'YOUR_SUPABASE_URL';
-// const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
-const supabaseUrl = process.env.supabaseUrl;
-const supabaseKey = process.env.supabaseKey;
+// Database configuration using environment variables
+const dbConnectionString = "postgresql://lab5database_user:IYE258XJiN77apbtJBaM2gpDzT8tkRzi@dpg-cupchjdsvqrc73evoegg-a.oregon-postgres.render.com/lab5database"
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Create a connection to PostgreSQL using the connection string
+const db = new Client({
+    connectionString: dbConnectionString,
+    ssl: {
+        rejectUnauthorized: false, // Required for Render's PostgreSQL SSL connections
+    },
+});
+
+db.connect(err => {
+    if (err) {
+        console.error("Database connection failed:", err);
+    } else {
+        console.log("Connected to PostgreSQL database.");
+    }
+});
+
+// Ensure the table exists for PostgreSQL
+db.query(`
+    CREATE TABLE IF NOT EXISTS patient (
+        patientid SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        dateOfBirth TIMESTAMP
+    );
+`, err => {
+    if (err) console.error("Error creating table:", err);
+});
 
 // Start the server
-const server = http.createServer(async (req, res) => {
-  const parsedUrl = url.parse(req.url, true);
-  
-  // Handle CORS preflight (OPTIONS) requests
-  if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "OPTIONS, GET, POST",
-      "Access-Control-Allow-Headers": "Content-Type",
-    });
-    return res.end();
-  }
+const server = http.createServer((req, res) => {
+    const parsedUrl = url.parse(req.url, true);
 
-  if (req.method === "POST" && parsedUrl.pathname === "/insert") {
-    let body = "";
-
-    req.on("data", chunk => { body += chunk.toString(); });
-    req.on("end", async () => {
-      try {
-        const { patients } = JSON.parse(body);
-        if (!Array.isArray(patients)) {
-          res.writeHead(400);
-          return res.end(JSON.stringify({ error: "Invalid input format" }));
-        }
-
-        const { data, error } = await supabase
-          .from('patient')
-          .insert(patients);
-
-        if (error) throw error;
-
-        res.end(JSON.stringify({ success: "Patients added", inserted: data.length }));
-      } catch (error) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: error.message }));
-      }
-    });
-  }
-
-  else if (req.method === "GET" && parsedUrl.pathname === "/query") {
-    const { table, select } = parsedUrl.query;
-
-    if (!table || !select) {
-      res.writeHead(400);
-      return res.end(JSON.stringify({ error: "Table and select parameters are required." }));
+    // Handle CORS preflight (OPTIONS) requests
+    if (req.method === "OPTIONS") {
+        res.writeHead(204, { // 204 No Content
+            "Access-Control-Allow-Origin": "*", // Allow any origin or specify your frontend domain
+            "Access-Control-Allow-Methods": "OPTIONS, GET, POST",
+            "Access-Control-Allow-Headers": "Content-Type",
+        });
+        return res.end();
     }
 
-    try {
-      const { data, error } = await supabase
-        .from(table)
-        .select(select);
+    // Handle POST request to /insert endpoint
+    if (req.method === "POST" && parsedUrl.pathname === "/insert") {
+        let body = "";
 
-      if (error) throw error;
+        req.on("data", chunk => { body += chunk.toString(); });
+        req.on("end", () => {
+            try {
+                const { patients } = JSON.parse(body);
+                if (!Array.isArray(patients)) {
+                    res.writeHead(400);
+                    return res.end(JSON.stringify({ error: "Invalid input format" }));
+                }
 
-      res.end(JSON.stringify(data));
-    } catch (error) {
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: error.message }));
+                const values = patients.map(p => [p.name, p.dateOfBirth]);
+                const sql = "INSERT INTO patient (name, dateOfBirth) VALUES ($1, $2) RETURNING *";
+
+                db.query(sql, [values], (err, results) => {
+                    if (err) {
+                        res.writeHead(500);
+                        return res.end(JSON.stringify({ error: err.message }));
+                    }
+                    res.end(JSON.stringify({ success: "Patients added", inserted: results.rows }));
+                });
+            } catch (error) {
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: "Invalid JSON payload" }));
+            }
+        });
     }
-  }
 
-  else if (req.method === "POST" && parsedUrl.pathname === "/query") {
-    let body = "";
-    req.on("data", chunk => { body += chunk.toString(); });
+    // Handle GET request to /query endpoint
+    else if (req.method === "GET" && parsedUrl.pathname === "/query") {
+        const sql = parsedUrl.query.sql;
 
-    req.on("end", async () => {
-      try {
-        const { table, data } = JSON.parse(body);
-
-        if (!table || !data) {
-          res.writeHead(400);
-          return res.end(JSON.stringify({ error: "Table and data are required for insertion." }));
+        if (!sql || !sql.trim().toUpperCase().startsWith("SELECT")) {
+            res.writeHead(400);
+            return res.end(JSON.stringify({ error: "Only SELECT queries are allowed via GET." }));
         }
 
-        const { data: result, error } = await supabase
-          .from(table)
-          .insert(data);
+        db.query(sql, (err, results) => {
+            if (err) {
+                res.writeHead(500);
+                return res.end(JSON.stringify({ error: err.message }));
+            }
+            res.end(JSON.stringify(results.rows)); // PostgreSQL results are in `rows` array
+        });
+    }
 
-        if (error) throw error;
+    // Handle POST request to /query endpoint (for INSERT queries)
+    else if (req.method === "POST" && parsedUrl.pathname === "/query") {
+        let body = "";
+        req.on("data", chunk => { body += chunk.toString(); });
 
-        res.end(JSON.stringify({ success: "Data inserted", result }));
-      } catch (error) {
-        res.writeHead(400);
-        res.end(JSON.stringify({ error: error.message }));
-      }
-    });
-  }
+        req.on("end", () => {
+            try {
+                const { sql } = JSON.parse(body);
 
-  else {
-    res.writeHead(404);
-    res.end(JSON.stringify({ error: "Not found" }));
-  }
+                if (!sql || !sql.trim().toUpperCase().startsWith("INSERT")) {
+                    res.writeHead(400);
+                    return res.end(JSON.stringify({ error: "Only INSERT queries are allowed via POST." }));
+                }
+
+                db.query(sql, (err, results) => {
+                    if (err) {
+                        res.writeHead(500);
+                        return res.end(JSON.stringify({ error: err.message }));
+                    }
+                    res.end(JSON.stringify({ success: "Query executed", results: results.rows }));
+                });
+            } catch (error) {
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: "Invalid JSON payload" }));
+            }
+        });
+    }
+
+    else {
+        res.writeHead(404);
+        res.end(JSON.stringify({ error: "Not found" }));
+    }
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    console.log('HTTP server closed');
-  });
+server.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
 });
