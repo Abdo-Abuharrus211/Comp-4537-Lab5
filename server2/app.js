@@ -11,7 +11,6 @@ const dbName = "patients";
 
 // Create a connector instance
 const connector = new Connector();
-
 let pool;
 
 async function initializePool() {
