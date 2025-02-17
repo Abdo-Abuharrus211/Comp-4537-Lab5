@@ -3,8 +3,6 @@ const url = require("url");
 const { createClient } = require('@supabase/supabase-js');
 
 // Supabase configuration
-// const supabaseUrl = 'YOUR_SUPABASE_URL';
-// const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
 const supabaseUrl = process.env.supabaseUrl;
 const supabaseKey = process.env.supabaseKey;
 
